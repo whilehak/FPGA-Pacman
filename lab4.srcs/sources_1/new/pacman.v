@@ -20,7 +20,13 @@ module pacman (
     //// --- CHANGE: pellet state memory ---
     reg pellet_map [0:19][0:14];
 
-    integer i,j;
+    //// --- CHANGE: track remaining pellets and win state ---
+    reg [8:0] pellet_count = 0;
+    wire win_active;
+    assign win_active = (pellet_count == 0);
+
+    integer i, j;
+    integer pellet_init_count;
     reg [19:0] wall_map [0:14];
     initial begin
         //// --- CHANGE: local copy of wall map for pellet initialization ---
@@ -40,12 +46,16 @@ module pacman (
         wall_map[13] = 20'b10000000000000000001;
         wall_map[14] = 20'b11111111111111111111;
 
-        //// --- CHANGE: place pellets ONLY where there are no walls ---
-        for(i=0;i<20;i=i+1) begin
-            for(j=0;j<15;j=j+1) begin
+        //// --- CHANGE: initialize pellets and count them ---
+        pellet_init_count = 0;
+        for (i = 0; i < 20; i = i + 1) begin
+            for (j = 0; j < 15; j = j + 1) begin
                 pellet_map[i][j] = !wall_map[j][19-i];
+                if (!wall_map[j][19-i])
+                    pellet_init_count = pellet_init_count + 1;
             end
         end
+        pellet_count = pellet_init_count;
     end
 
     // Clock Divider
@@ -61,7 +71,13 @@ module pacman (
         .y(y)
     );
 
-    map_data render_map (.x(x), .y(y), .wall(wall));
+    //// --- CHANGE: render normal map during play, win map after all pellets are collected ---
+    map_data render_map (
+        .x(x),
+        .y(y),
+        .win_active(win_active),
+        .wall(wall)
+    );
 
 /////////////////////////////////////////////////////////
 //// PACMAN COLLISION (HITBOX REDUCED)
@@ -71,21 +87,22 @@ module pacman (
     wire move_u1, move_u2, move_d1, move_d2, move_l1, move_l2, move_r1, move_r2;
 
     //// --- CHANGE: collision reduced from 31/32 -> 27/28
+    //// --- CHANGE: collision checks always use the normal gameplay map ---
 
-    map_data p_up1 (.x(sx),      .y(sy - 1),  .wall(move_u1));
-    map_data p_up2 (.x(sx + 27), .y(sy - 1),  .wall(move_u2));
+    map_data p_up1 (.x(sx),      .y(sy - 1),  .win_active(1'b0), .wall(move_u1));
+    map_data p_up2 (.x(sx + 25), .y(sy - 1),  .win_active(1'b0), .wall(move_u2));
     assign can_move_up = !move_u1 && !move_u2;
 
-    map_data p_dn1 (.x(sx),      .y(sy + 28), .wall(move_d1));
-    map_data p_dn2 (.x(sx + 27), .y(sy + 28), .wall(move_d2));
+    map_data p_dn1 (.x(sx),      .y(sy + 26), .win_active(1'b0), .wall(move_d1));
+    map_data p_dn2 (.x(sx + 25), .y(sy + 26), .win_active(1'b0), .wall(move_d2));
     assign can_move_down = !move_d1 && !move_d2;
 
-    map_data p_lf1 (.x(sx - 1),  .y(sy),      .wall(move_l1));
-    map_data p_lf2 (.x(sx - 1),  .y(sy + 27), .wall(move_l2));
+    map_data p_lf1 (.x(sx - 1),  .y(sy),      .win_active(1'b0), .wall(move_l1));
+    map_data p_lf2 (.x(sx - 1),  .y(sy + 25), .win_active(1'b0), .wall(move_l2));
     assign can_move_left = !move_l1 && !move_l2;
 
-    map_data p_rt1 (.x(sx + 28), .y(sy),      .wall(move_r1));
-    map_data p_rt2 (.x(sx + 28), .y(sy + 27), .wall(move_r2));
+    map_data p_rt1 (.x(sx + 26), .y(sy),      .win_active(1'b0), .wall(move_r1));
+    map_data p_rt2 (.x(sx + 26), .y(sy + 25), .win_active(1'b0), .wall(move_r2));
     assign can_move_right = !move_r1 && !move_r2;
 
 /////////////////////////////////////////////////////////
@@ -98,20 +115,21 @@ module pacman (
     wire g_can_move_up, g_can_move_down, g_can_move_left, g_can_move_right;
     wire gm_u1, gm_u2, gm_d1, gm_d2, gm_l1, gm_l2, gm_r1, gm_r2;
 
-    map_data g_up1 (.x(gx),      .y(gy - 1),  .wall(gm_u1));
-    map_data g_up2 (.x(gx + 27), .y(gy - 1),  .wall(gm_u2));
+    //// --- CHANGE: ghost collision checks always use the normal gameplay map ---
+    map_data g_up1 (.x(gx),      .y(gy - 1),  .win_active(1'b0), .wall(gm_u1));
+    map_data g_up2 (.x(gx + 27), .y(gy - 1),  .win_active(1'b0), .wall(gm_u2));
     assign g_can_move_up = !gm_u1 && !gm_u2;
 
-    map_data g_dn1 (.x(gx),      .y(gy + 28), .wall(gm_d1));
-    map_data g_dn2 (.x(gx + 27), .y(gy + 28), .wall(gm_d2));
+    map_data g_dn1 (.x(gx),      .y(gy + 28), .win_active(1'b0), .wall(gm_d1));
+    map_data g_dn2 (.x(gx + 27), .y(gy + 28), .win_active(1'b0), .wall(gm_d2));
     assign g_can_move_down = !gm_d1 && !gm_d2;
 
-    map_data g_lf1 (.x(gx - 1),  .y(gy),      .wall(gm_l1));
-    map_data g_lf2 (.x(gx - 1),  .y(gy + 27), .wall(gm_l2));
+    map_data g_lf1 (.x(gx - 1),  .y(gy),      .win_active(1'b0), .wall(gm_l1));
+    map_data g_lf2 (.x(gx - 1),  .y(gy + 27), .win_active(1'b0), .wall(gm_l2));
     assign g_can_move_left = !gm_l1 && !gm_l2;
 
-    map_data g_rt1 (.x(gx + 28), .y(gy),      .wall(gm_r1));
-    map_data g_rt2 (.x(gx + 28), .y(gy + 27), .wall(gm_r2));
+    map_data g_rt1 (.x(gx + 28), .y(gy),      .win_active(1'b0), .wall(gm_r1));
+    map_data g_rt2 (.x(gx + 28), .y(gy + 27), .win_active(1'b0), .wall(gm_r2));
     assign g_can_move_right = !gm_r1 && !gm_r2;
 
 /////////////////////////////////////////////////////////
@@ -128,7 +146,19 @@ module pacman (
         (sy + 28 > gy);
 
     always @(posedge clk25) begin
-        if (!blackout && !lose_active && ghost_hits_pacman) begin
+        //// --- CHANGE: freeze everything on the win screen ---
+        if (win_active) begin
+            m_cnt <= m_cnt;
+            ghost_tick <= ghost_tick;
+            sx <= sx;
+            sy <= sy;
+            gx <= gx;
+            gy <= gy;
+            lose_active <= 0;
+            blackout <= 0;
+            lose_cnt <= 0;
+        end
+        else if (!blackout && !lose_active && ghost_hits_pacman) begin
             lose_active <= 1;
             lose_cnt <= 0;
         end
@@ -153,23 +183,22 @@ module pacman (
                 if (btnL && sx > 0   && can_move_left)  sx <= sx - 1;
                 if (btnR && sx < 608 && can_move_right) sx <= sx + 1;
 
-                //// --- CHANGE: pellet eating ---
-                pellet_map[(sx+16)>>5][(sy+16)>>5] <= 0;
+                //// --- CHANGE: pellet eating + win tracking ---
+                if (pellet_map[(sx+16)>>5][(sy+16)>>5]) begin
+                    pellet_map[(sx+16)>>5][(sy+16)>>5] <= 0;
+                    if (pellet_count > 0)
+                        pellet_count <= pellet_count - 1;
+                end
 
                 if (ghost_tick != 0) begin
-
                     if (g_can_move_up && (gy > sy))
                         gy <= gy - 1;
-
                     else if (g_can_move_down && (gy < sy))
                         gy <= gy + 1;
-
                     else if (g_can_move_right && (gx < sx))
                         gx <= gx + 1;
-
                     else if (g_can_move_left && (gx > sx))
                         gx <= gx - 1;
-
                 end
             end
         end
@@ -214,19 +243,20 @@ module pacman (
 //// COLOR LOGIC
 /////////////////////////////////////////////////////////
 
+    //// --- CHANGE: when win_active, only the win map is shown ---
     assign vgaRed =
-        (video_on && !blackout && (is_pacman || is_ghost)) ? 4'b1111 :
-        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
+        (video_on && !blackout && !win_active && (is_pacman || is_ghost)) ? 4'b1111 :
+        (video_on && !blackout && !win_active && pellet_pixel) ? 4'b1111 :
         4'b0000;
 
     assign vgaGreen =
-        (video_on && !blackout && is_pacman) ? 4'b1111 :
-        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
+        (video_on && !blackout && !win_active && is_pacman) ? 4'b1111 :
+        (video_on && !blackout && !win_active && pellet_pixel) ? 4'b1111 :
         4'b0000;
 
     assign vgaBlue =
         (video_on && !blackout && wall) ? 4'b1111 :
-        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
+        (video_on && !blackout && !win_active && pellet_pixel) ? 4'b1111 :
         4'b0000;
 
 endmodule
@@ -290,12 +320,16 @@ endmodule
 
 module map_data (
     input wire [9:0] x, y,
+    //// --- CHANGE: select between gameplay map and win map ---
+    input wire win_active,
     output wire wall
 );
 
     reg [19:0] map [0:14];
+    reg [19:0] win_screen[0:14];
 
     initial begin
+        //// --- CHANGE: normal gameplay map ---
         map[0]  = 20'b11111111111111111111;
         map[1]  = 20'b10000000000000000001;
         map[2]  = 20'b10111011101111011101;
@@ -311,10 +345,29 @@ module map_data (
         map[12] = 20'b10010111100111101001;
         map[13] = 20'b10000000000000000001;
         map[14] = 20'b11111111111111111111;
-    end
 
+        //// --- CHANGE: win screen map ("YOU WIN") using 1s as letters ---
+        win_screen[0]  = 20'b11111111111111111111;
+        win_screen[1]  = 20'b00000000000000000000;
+        win_screen[2]  = 20'b01000101111101000100;
+        win_screen[3]  = 20'b00101001000101000100;
+        win_screen[4]  = 20'b00010001000101000100;
+        win_screen[5]  = 20'b00010001000101000100;
+        win_screen[6]  = 20'b00010001111101111100;
+        win_screen[7]  = 20'b00000000000000000000;
+        win_screen[8]  = 20'b01000101111101000100;
+        win_screen[9]  = 20'b01010100010001100100;
+        win_screen[10] = 20'b01010100010001010100;
+        win_screen[11] = 20'b01101100010001001100;
+        win_screen[12] = 20'b01000101111101000100;
+        win_screen[13] = 20'b00000000000000000000;
+        win_screen[14] = 20'b11111111111111111111;
+    end
+    
+    //// --- CHANGE: use win_screen only after all pellets are collected ---
     assign wall = (x < 640 && y < 480) ?
-                  map[y >> 5][19 - (x >> 5)] :
+                  (win_active ? win_screen[y >> 5][19 - (x >> 5)] :
+                                map[y >> 5][19 - (x >> 5)]) :
                   1'b0;
 
 endmodule
