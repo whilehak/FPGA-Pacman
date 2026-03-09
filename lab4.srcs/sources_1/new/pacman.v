@@ -11,6 +11,11 @@ module pacman (
 
     reg [9:0] sx = 32, sy = 32;
     reg [19:0] m_cnt = 0;
+    reg lose_active = 0;
+    reg blackout = 0;
+    reg [25:0] lose_cnt = 0;
+
+    localparam [25:0] LOSE_WAIT_CYCLES = 26'd50000000; // 2 seconds at 25MHz
 
     //// --- CHANGE: pellet state memory ---
     reg pellet_map [0:19][0:14];
@@ -114,37 +119,58 @@ module pacman (
 /////////////////////////////////////////////////////////
 
     reg [1:0] ghost_tick = 0;
+    wire ghost_hits_pacman;
+
+    assign ghost_hits_pacman =
+        (sx < gx + 28) &&
+        (sx + 28 > gx) &&
+        (sy < gy + 28) &&
+        (sy + 28 > gy);
 
     always @(posedge clk25) begin
+        if (!blackout && !lose_active && ghost_hits_pacman) begin
+            lose_active <= 1;
+            lose_cnt <= 0;
+        end
+        else if (lose_active) begin
+            if (lose_cnt == LOSE_WAIT_CYCLES - 1) begin
+                lose_active <= 0;
+                blackout <= 1;
+            end
+            else begin
+                lose_cnt <= lose_cnt + 1;
+            end
+        end
+        else if (!blackout) begin
+            m_cnt <= m_cnt + 1;
+            ghost_tick <= ghost_tick + 1;
 
-        m_cnt <= m_cnt + 1;
-        ghost_tick <= ghost_tick + 1;
+            if (m_cnt == 300000) begin
+                m_cnt <= 0;
 
-        if (m_cnt == 300000) begin
-            m_cnt <= 0;
+                if (btnU && sy > 0   && can_move_up)    sy <= sy - 1;
+                if (btnD && sy < 448 && can_move_down)  sy <= sy + 1;
+                if (btnL && sx > 0   && can_move_left)  sx <= sx - 1;
+                if (btnR && sx < 608 && can_move_right) sx <= sx + 1;
 
-            if (btnU && sy > 0   && can_move_up)    sy <= sy - 1;
-            if (btnD && sy < 448 && can_move_down)  sy <= sy + 1;
-            if (btnL && sx > 0   && can_move_left)  sx <= sx - 1;
-            if (btnR && sx < 608 && can_move_right) sx <= sx + 1;
+                //// --- CHANGE: pellet eating ---
+                pellet_map[(sx+16)>>5][(sy+16)>>5] <= 0;
 
-            //// --- CHANGE: pellet eating ---
-            pellet_map[(sx+16)>>5][(sy+16)>>5] <= 0;
+                if (ghost_tick != 0) begin
 
-            if (ghost_tick != 0) begin
+                    if (g_can_move_up && (gy > sy))
+                        gy <= gy - 1;
 
-                if (g_can_move_up && (gy > sy))
-                    gy <= gy - 1;
+                    else if (g_can_move_down && (gy < sy))
+                        gy <= gy + 1;
 
-                else if (g_can_move_down && (gy < sy))
-                    gy <= gy + 1;
+                    else if (g_can_move_right && (gx < sx))
+                        gx <= gx + 1;
 
-                else if (g_can_move_right && (gx < sx))
-                    gx <= gx + 1;
+                    else if (g_can_move_left && (gx > sx))
+                        gx <= gx - 1;
 
-                else if (g_can_move_left && (gx > sx))
-                    gx <= gx - 1;
-
+                end
             end
         end
     end
@@ -158,6 +184,7 @@ module pacman (
     wire [9:0] dist_x = (x >= sx + 16) ? (x - (sx + 16)) : ((sx + 16) - x);
     wire [9:0] dist_y = (y >= sy + 16) ? (y - (sy + 16)) : ((sy + 16) - y);
 
+    wire is_pacman;
     assign is_pacman = (dist_x*dist_x + dist_y*dist_y <= 196);
 
 /////////////////////////////////////////////////////////
@@ -188,15 +215,19 @@ module pacman (
 /////////////////////////////////////////////////////////
 
     assign vgaRed =
-        (video_on && (is_pacman || is_ghost)) ? 4'b1111 : 4'b0000;
+        (video_on && !blackout && (is_pacman || is_ghost)) ? 4'b1111 :
+        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
+        4'b0000;
 
     assign vgaGreen =
-        (video_on && is_pacman) ? 4'b1111 :
-        (video_on && pellet_pixel) ? 4'b1111 :
+        (video_on && !blackout && is_pacman) ? 4'b1111 :
+        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
         4'b0000;
 
     assign vgaBlue =
-        (video_on && wall) ? 4'b1111 : 4'b0000;
+        (video_on && !blackout && wall) ? 4'b1111 :
+        (video_on && !blackout && pellet_pixel) ? 4'b1111 :
+        4'b0000;
 
 endmodule
 
