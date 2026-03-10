@@ -86,23 +86,23 @@ module pacman (
     wire can_move_up, can_move_down, can_move_left, can_move_right;
     wire move_u1, move_u2, move_d1, move_d2, move_l1, move_l2, move_r1, move_r2;
 
-    //// --- CHANGE: collision reduced from 31/32 -> 27/28
+    //// --- CHANGE: Pacman collision uses 28x28 to match visual size
     //// --- CHANGE: collision checks always use the normal gameplay map ---
 
     map_data p_up1 (.x(sx),      .y(sy - 1),  .win_active(1'b0), .wall(move_u1));
-    map_data p_up2 (.x(sx + 25), .y(sy - 1),  .win_active(1'b0), .wall(move_u2));
+    map_data p_up2 (.x(sx + 27), .y(sy - 1),  .win_active(1'b0), .wall(move_u2));
     assign can_move_up = !move_u1 && !move_u2;
 
-    map_data p_dn1 (.x(sx),      .y(sy + 26), .win_active(1'b0), .wall(move_d1));
-    map_data p_dn2 (.x(sx + 25), .y(sy + 26), .win_active(1'b0), .wall(move_d2));
+    map_data p_dn1 (.x(sx),      .y(sy + 28), .win_active(1'b0), .wall(move_d1));
+    map_data p_dn2 (.x(sx + 27), .y(sy + 28), .win_active(1'b0), .wall(move_d2));
     assign can_move_down = !move_d1 && !move_d2;
 
     map_data p_lf1 (.x(sx - 1),  .y(sy),      .win_active(1'b0), .wall(move_l1));
-    map_data p_lf2 (.x(sx - 1),  .y(sy + 25), .win_active(1'b0), .wall(move_l2));
+    map_data p_lf2 (.x(sx - 1),  .y(sy + 27), .win_active(1'b0), .wall(move_l2));
     assign can_move_left = !move_l1 && !move_l2;
 
-    map_data p_rt1 (.x(sx + 26), .y(sy),      .win_active(1'b0), .wall(move_r1));
-    map_data p_rt2 (.x(sx + 26), .y(sy + 25), .win_active(1'b0), .wall(move_r2));
+    map_data p_rt1 (.x(sx + 28), .y(sy),      .win_active(1'b0), .wall(move_r1));
+    map_data p_rt2 (.x(sx + 28), .y(sy + 27), .win_active(1'b0), .wall(move_r2));
     assign can_move_right = !move_r1 && !move_r2;
 
 /////////////////////////////////////////////////////////
@@ -115,21 +115,21 @@ module pacman (
     wire g_can_move_up, g_can_move_down, g_can_move_left, g_can_move_right;
     wire gm_u1, gm_u2, gm_d1, gm_d2, gm_l1, gm_l2, gm_r1, gm_r2;
 
-    //// --- CHANGE: ghost collision checks always use the normal gameplay map ---
+    //// --- CHANGE: ghost collision uses 32x32 to match visual size ---
     map_data g_up1 (.x(gx),      .y(gy - 1),  .win_active(1'b0), .wall(gm_u1));
-    map_data g_up2 (.x(gx + 27), .y(gy - 1),  .win_active(1'b0), .wall(gm_u2));
+    map_data g_up2 (.x(gx + 31), .y(gy - 1),  .win_active(1'b0), .wall(gm_u2));
     assign g_can_move_up = !gm_u1 && !gm_u2;
 
-    map_data g_dn1 (.x(gx),      .y(gy + 28), .win_active(1'b0), .wall(gm_d1));
-    map_data g_dn2 (.x(gx + 27), .y(gy + 28), .win_active(1'b0), .wall(gm_d2));
+    map_data g_dn1 (.x(gx),      .y(gy + 32), .win_active(1'b0), .wall(gm_d1));
+    map_data g_dn2 (.x(gx + 31), .y(gy + 32), .win_active(1'b0), .wall(gm_d2));
     assign g_can_move_down = !gm_d1 && !gm_d2;
 
     map_data g_lf1 (.x(gx - 1),  .y(gy),      .win_active(1'b0), .wall(gm_l1));
-    map_data g_lf2 (.x(gx - 1),  .y(gy + 27), .win_active(1'b0), .wall(gm_l2));
+    map_data g_lf2 (.x(gx - 1),  .y(gy + 31), .win_active(1'b0), .wall(gm_l2));
     assign g_can_move_left = !gm_l1 && !gm_l2;
 
-    map_data g_rt1 (.x(gx + 28), .y(gy),      .win_active(1'b0), .wall(gm_r1));
-    map_data g_rt2 (.x(gx + 28), .y(gy + 27), .win_active(1'b0), .wall(gm_r2));
+    map_data g_rt1 (.x(gx + 32), .y(gy),      .win_active(1'b0), .wall(gm_r1));
+    map_data g_rt2 (.x(gx + 32), .y(gy + 31), .win_active(1'b0), .wall(gm_r2));
     assign g_can_move_right = !gm_r1 && !gm_r2;
 
 /////////////////////////////////////////////////////////
@@ -140,9 +140,9 @@ module pacman (
     wire ghost_hits_pacman;
 
     assign ghost_hits_pacman =
-        (sx < gx + 28) &&
+        (sx < gx + 32) &&
         (sx + 28 > gx) &&
-        (sy < gy + 28) &&
+        (sy < gy + 32) &&
         (sy + 28 > gy);
 
     always @(posedge clk25) begin
@@ -184,8 +184,8 @@ module pacman (
                 if (btnR && sx < 608 && can_move_right) sx <= sx + 1;
 
                 //// --- CHANGE: pellet eating + win tracking ---
-                if (pellet_map[(sx+16)>>5][(sy+16)>>5]) begin
-                    pellet_map[(sx+16)>>5][(sy+16)>>5] <= 0;
+                if (pellet_map[(sx+14)>>5][(sy+14)>>5]) begin
+                    pellet_map[(sx+14)>>5][(sy+14)>>5] <= 0;
                     if (pellet_count > 0)
                         pellet_count <= pellet_count - 1;
                 end
@@ -205,13 +205,11 @@ module pacman (
     end
 
 /////////////////////////////////////////////////////////
-//// PACMAN DRAW (RADIUS REDUCED)
+//// PACMAN DRAW 
 /////////////////////////////////////////////////////////
 
-    //// --- CHANGE: radius 16 -> 14
-
-    wire [9:0] dist_x = (x >= sx + 16) ? (x - (sx + 16)) : ((sx + 16) - x);
-    wire [9:0] dist_y = (y >= sy + 16) ? (y - (sy + 16)) : ((sy + 16) - y);
+    wire [9:0] dist_x = (x >= sx + 14) ? (x - (sx + 14)) : ((sx + 14) - x);
+    wire [9:0] dist_y = (y >= sy + 14) ? (y - (sy + 14)) : ((sy + 14) - y);
 
     wire is_pacman;
     assign is_pacman = (dist_x*dist_x + dist_y*dist_y <= 196);
